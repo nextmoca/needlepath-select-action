@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, test, bundle, audit, and SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "20.19.5"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify source and bundled action
+        run: npm run verify
+
+      - name: Reject stale committed bundles
+        run: git diff --exit-code -- dist
+
+      - name: Audit dependencies
+        run: npm run audit:dependencies
+
+      - name: Generate CycloneDX SBOM
+        run: npm --silent run sbom > sbom.cdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: needlepath-action-sbom-${{ github.sha }}
+          path: sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 9
+
+  smoke:
+    name: Bundled fail-open smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "20.19.5"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run platform test suite
+        run: npm test
+
+      - name: Execute bundled action with one-line disable
+        id: needlepath
+        uses: ./
+        with:
+          workflow-type: custom
+          enabled: false
+          query: Verify exact disabled passthrough.
+          context-path: test/fixtures/original-context.txt
+          mode: select
+          operating-point: np-2026-08-r3
+
+      - name: Prove downstream bytes equal the original
+        env:
+          ORIGINAL_PATH: ${{ steps.needlepath.outputs.original-context-path }}
+          DOWNSTREAM_PATH: ${{ steps.needlepath.outputs.context-path }}
+          APPLIED: ${{ steps.needlepath.outputs.applied }}
+          REASON: ${{ steps.needlepath.outputs.reason }}
+        run: node -e "const fs=require('node:fs');if(process.env.APPLIED!=='false'||process.env.REASON!=='disabled'||!process.env.DOWNSTREAM_PATH||!fs.readFileSync(process.env.ORIGINAL_PATH).equals(fs.readFileSync(process.env.DOWNSTREAM_PATH)))process.exit(1)"
+
+  codeql:
+    name: CodeQL (local SARIF)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+        with:
+          languages: javascript-typescript
+          config: |
+            name: needlepath-select-action
+            paths:
+              - src
+              - scripts
+      - id: analyze
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+        with:
+          output: codeql-results
+          upload: never
+          upload-database: false
+
+      - name: Upload CodeQL SARIF
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: needlepath-action-codeql-${{ github.sha }}
+          path: ${{ steps.analyze.outputs.sarif-output }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 9

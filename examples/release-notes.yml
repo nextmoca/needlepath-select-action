@@ -1,0 +1,51 @@
+name: Needlepath Release Notes Context
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Previous release tag or base commit.
+        required: true
+        type: string
+      head_ref:
+        description: Release tag or head commit.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  issues: read
+  pull-requests: read
+
+# Replace the 40-zero placeholder below with the release SHA from this repo's Releases page.
+jobs:
+  needlepath:
+    uses: nextmoca/needlepath-select-action/.github/workflows/needlepath-context-preparation.yml@0000000000000000000000000000000000000000
+    with:
+      workflow_type: release-notes
+      base_ref: ${{ inputs.base_ref }}
+      head_ref: ${{ inputs.head_ref }}
+      mode: shadow # Change only this value to select after validating shadow outcomes.
+      operating_point: np-2026-08-r3
+    secrets:
+      needlepath_api_key: ${{ secrets.NEEDLEPATH_API_KEY }}
+
+  downstream-agent:
+    needs: needlepath
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download selected-or-original context
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: ${{ needs.needlepath.outputs.artifact_name }}
+          path: .needlepath-context
+
+      - name: Verify the provider-neutral handoff
+        env:
+          NEEDLEPATH_CONTEXT_PATH: .needlepath-context/context.txt
+        run: node -e "const fs=require('node:fs');const p=process.env.NEEDLEPATH_CONTEXT_PATH;if(!p||!fs.statSync(p).isFile()||fs.statSync(p).size===0)process.exit(1)"
+
+      # Invoke the customer-controlled release-notes agent here and pass
+      # .needlepath-context/context.txt as its context file. Do not print it.

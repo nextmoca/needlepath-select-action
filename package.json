@@ -1,0 +1,32 @@
+{
+  "name": "@nextmoca/needlepath-select-action",
+  "version": "0.1.0",
+  "description": "Provider-neutral Needlepath context selection for GitHub agent workflows.",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "test:coverage": "node scripts/run-tests.mjs --coverage",
+    "build": "npm run clean && ncc build src/index.ts -o dist --minify --source-map",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "verify": "npm run typecheck && npm test && npm run build && npm run check:bundle",
+    "audit:dependencies": "npm audit --audit-level=moderate",
+    "sbom": "npm sbom --sbom-format=cyclonedx"
+  },
+  "dependencies": {
+    "@nextmoca/needlepath-sdk": "0.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "@vercel/ncc": "0.38.3",
+    "tsx": "4.20.5",
+    "typescript": "5.9.2",
+    "yaml": "^2.8.3"
+  }
+}

@@ -1,0 +1,115 @@
+name: Needlepath Select
+description: Select relevant GitHub workflow context with exact fail-open and provider-neutral outputs.
+author: Next Moca
+branding:
+  icon: filter
+  color: orange
+
+inputs:
+  workflow-type:
+    description: custom, pr-review, ci-diagnosis, or release-notes.
+    required: false
+    default: custom
+  enabled:
+    description: Set false to bypass Needlepath while preserving the same downstream file contract.
+    required: false
+    default: "true"
+  query:
+    description: Current task. Built-in workflows infer a safe default when omitted.
+    required: false
+  task-path:
+    description: Workspace-relative UTF-8 file containing the current task.
+    required: false
+  context-path:
+    description: Workspace-relative UTF-8 candidate context file.
+    required: false
+  records-path:
+    description: Workspace-relative JSON array or JSONL typed-record file.
+    required: false
+  mandatory-context-path:
+    description: Workspace-relative context that must never enter selection.
+    required: false
+  required-paths:
+    description: Newline- or comma-separated workspace files that are always mandatory.
+    required: false
+  required-record-ids:
+    description: Newline- or comma-separated record IDs that are always mandatory.
+    required: false
+  log-paths:
+    description: Optional bounded local logs for CI diagnosis.
+    required: false
+  mode:
+    description: Shadow measures without changing downstream context; select applies only safe SDK results.
+    required: false
+    default: shadow
+  operating-point:
+    description: Immutable Needlepath operating point.
+    required: false
+    default: np-2026-08-r3
+  endpoint:
+    description: Optional hosted, loopback, or private Needlepath endpoint.
+    required: false
+  max-context-tokens:
+    description: Maximum selected candidate-context tokens.
+    required: false
+    default: "8000"
+  capacity-cap-tokens:
+    description: Optional downstream model input-capacity ceiling.
+    required: false
+  max-records:
+    description: Maximum selectable candidate records.
+    required: false
+    default: "200"
+  max-record-bytes:
+    description: Maximum UTF-8 bytes per collected candidate record.
+    required: false
+    default: "200000"
+  timeout-ms:
+    description: End-to-end Needlepath request deadline.
+    required: false
+    default: "10000"
+  base-ref:
+    description: Optional release comparison base reference.
+    required: false
+  head-ref:
+    description: Optional release comparison head reference.
+    required: false
+  github-run-id:
+    description: Optional completed run ID for CI diagnosis.
+    required: false
+
+outputs:
+  context-path:
+    description: Selected-or-original context file for the downstream agent.
+  original-context-path:
+    description: Byte-identical original eligible context file.
+  metrics-path:
+    description: Metadata-only JSON decision metrics safe for short-lived artifact upload.
+  applied:
+    description: Whether selected context is safe to consume.
+  outcome:
+    description: Forward-compatible Needlepath service outcome.
+  reason:
+    description: Forward-compatible public reason code.
+  tokens-before:
+    description: Needlepath service estimate before selection.
+  tokens-after:
+    description: Needlepath service estimate after selection.
+  estimated-tokens-saved:
+    description: Needlepath service estimate, not provider-billed savings.
+  estimated-reduction-percent:
+    description: Estimated candidate-context reduction percentage.
+  selection-latency-ms:
+    description: Selection latency in milliseconds.
+  request-id:
+    description: Needlepath request correlation ID.
+  operating-point:
+    description: Echoed immutable operating point.
+  fail-open:
+    description: Whether select mode preserved original context after a non-applied result.
+  downstream-context:
+    description: selected or original.
+
+runs:
+  using: node24
+  main: dist/index.js

@@ -1,0 +1,233 @@
+name: Needlepath Context Preparation
+
+on:
+  workflow_call:
+    inputs:
+      workflow_type:
+        description: custom, pr-review, ci-diagnosis, or release-notes.
+        required: false
+        type: string
+        default: pr-review
+      enabled:
+        description: One-line bypass; false uploads exact original eligible context.
+        required: false
+        type: boolean
+        default: true
+      mode:
+        description: Shadow preserves original context; select applies safe selections.
+        required: false
+        type: string
+        default: shadow
+      query:
+        description: Optional task override for the selected collector.
+        required: false
+        type: string
+        default: ""
+      context_path:
+        description: Workspace-relative candidate context file for custom workflows.
+        required: false
+        type: string
+        default: ""
+      records_path:
+        description: Workspace-relative JSON or JSONL typed-record file for custom workflows.
+        required: false
+        type: string
+        default: ""
+      mandatory_context_path:
+        description: Workspace-relative context that must bypass selection.
+        required: false
+        type: string
+        default: ""
+      required_paths:
+        description: Newline-separated repository paths that always bypass selection.
+        required: false
+        type: string
+        default: ""
+      required_record_ids:
+        description: Newline-separated record IDs that must be retained.
+        required: false
+        type: string
+        default: ""
+      log_paths:
+        description: Optional newline-separated local CI log paths.
+        required: false
+        type: string
+        default: ""
+      endpoint:
+        description: Hosted or private Needlepath API base URL.
+        required: false
+        type: string
+        default: https://api.nextmoca.com
+      operating_point:
+        description: Immutable Needlepath operating point.
+        required: false
+        type: string
+        default: np-2026-08-r3
+      max_context_tokens:
+        description: Selected-context budget.
+        required: false
+        type: number
+        default: 8000
+      capacity_cap_tokens:
+        description: Optional downstream model capacity ceiling; zero means unset.
+        required: false
+        type: number
+        default: 0
+      max_records:
+        description: Maximum selectable records sent to Needlepath.
+        required: false
+        type: number
+        default: 200
+      max_record_bytes:
+        description: Maximum UTF-8 bytes retained per collected record.
+        required: false
+        type: number
+        default: 200000
+      timeout_ms:
+        description: End-to-end selection deadline.
+        required: false
+        type: number
+        default: 10000
+      base_ref:
+        description: Optional release-note comparison base.
+        required: false
+        type: string
+        default: ""
+      head_ref:
+        description: Optional release-note comparison head.
+        required: false
+        type: string
+        default: ""
+      github_run_id:
+        description: Optional completed GitHub run ID for CI diagnosis; zero infers from event.
+        required: false
+        type: number
+        default: 0
+      artifact_name:
+        description: Prefix for the one-day downstream context artifact.
+        required: false
+        type: string
+        default: needlepath-context
+    secrets:
+      needlepath_api_key:
+        description: Per-tenant Needlepath API key. Missing keys safely fail open.
+        required: false
+    outputs:
+      artifact_name:
+        description: Artifact containing selected-or-original context for downstream jobs.
+        value: ${{ jobs.prepare.outputs.artifact-name }}
+      artifact_id:
+        description: GitHub artifact ID.
+        value: ${{ jobs.prepare.outputs.artifact-id }}
+      artifact_digest:
+        description: GitHub artifact digest.
+        value: ${{ jobs.prepare.outputs.artifact-digest }}
+      applied:
+        description: Whether select mode safely applied selected context.
+        value: ${{ jobs.prepare.outputs.applied }}
+      outcome:
+        description: Forward-compatible Needlepath outcome.
+        value: ${{ jobs.prepare.outputs.outcome }}
+      reason:
+        description: Public decision reason code.
+        value: ${{ jobs.prepare.outputs.reason }}
+      downstream_context:
+        description: selected or original.
+        value: ${{ jobs.prepare.outputs.downstream-context }}
+      estimated_tokens_saved:
+        description: Needlepath estimate, not provider-billed usage.
+        value: ${{ jobs.prepare.outputs.estimated-tokens-saved }}
+      estimated_reduction_percent:
+        description: Estimated candidate-context reduction.
+        value: ${{ jobs.prepare.outputs.estimated-reduction-percent }}
+      selection_latency_ms:
+        description: Selection latency in milliseconds.
+        value: ${{ jobs.prepare.outputs.selection-latency-ms }}
+      request_id:
+        description: Correlation ID for audit and support.
+        value: ${{ jobs.prepare.outputs.request-id }}
+      operating_point:
+        description: Echoed immutable operating point.
+        value: ${{ jobs.prepare.outputs.operating-point }}
+      fail_open:
+        description: Whether exact original eligible context was preserved after a non-applied selection.
+        value: ${{ jobs.prepare.outputs.fail-open }}
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      artifact-name: ${{ inputs.artifact_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+      artifact-id: ${{ steps.artifact.outputs.artifact-id }}
+      artifact-digest: ${{ steps.artifact.outputs.artifact-digest }}
+      applied: ${{ steps.needlepath.outputs.applied }}
+      outcome: ${{ steps.needlepath.outputs.outcome }}
+      reason: ${{ steps.needlepath.outputs.reason }}
+      downstream-context: ${{ steps.needlepath.outputs.downstream-context }}
+      estimated-tokens-saved: ${{ steps.needlepath.outputs.estimated-tokens-saved }}
+      estimated-reduction-percent: ${{ steps.needlepath.outputs.estimated-reduction-percent }}
+      selection-latency-ms: ${{ steps.needlepath.outputs.selection-latency-ms }}
+      request-id: ${{ steps.needlepath.outputs.request-id }}
+      operating-point: ${{ steps.needlepath.outputs.operating-point }}
+      fail-open: ${{ steps.needlepath.outputs.fail-open }}
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check out matching Needlepath Action revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: nextmoca/needlepath-select-action
+          ref: ${{ job.workflow_sha }}
+          path: .needlepath-action-source
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Prepare downstream context
+        id: needlepath
+        uses: ./.needlepath-action-source
+        with:
+          workflow-type: ${{ inputs.workflow_type }}
+          enabled: ${{ inputs.enabled }}
+          query: ${{ inputs.query }}
+          context-path: ${{ inputs.context_path }}
+          records-path: ${{ inputs.records_path }}
+          mandatory-context-path: ${{ inputs.mandatory_context_path }}
+          required-paths: ${{ inputs.required_paths }}
+          required-record-ids: ${{ inputs.required_record_ids }}
+          log-paths: ${{ inputs.log_paths }}
+          mode: ${{ inputs.mode }}
+          endpoint: ${{ inputs.endpoint }}
+          operating-point: ${{ inputs.operating_point }}
+          max-context-tokens: ${{ inputs.max_context_tokens }}
+          capacity-cap-tokens: ${{ inputs.capacity_cap_tokens > 0 && inputs.capacity_cap_tokens || '' }}
+          max-records: ${{ inputs.max_records }}
+          max-record-bytes: ${{ inputs.max_record_bytes }}
+          timeout-ms: ${{ inputs.timeout_ms }}
+          base-ref: ${{ inputs.base_ref }}
+          head-ref: ${{ inputs.head_ref }}
+          github-run-id: ${{ inputs.github_run_id > 0 && inputs.github_run_id || '' }}
+        env:
+          NEEDLEPATH_API_KEY: ${{ secrets.needlepath_api_key }}
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Upload selected-or-original context for downstream jobs
+        id: artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ${{ inputs.artifact_name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.needlepath.outputs.context-path }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9

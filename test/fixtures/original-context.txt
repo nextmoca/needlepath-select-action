@@ -1,0 +1,1 @@
+This exact context must survive disabled and fail-open execution byte for byte.
